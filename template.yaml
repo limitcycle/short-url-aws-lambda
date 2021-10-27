@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  short-url-aws-lambda
+  
+  Sample SAM Template for short-url-aws-lambda
+
+Globals:
+  Function:
+    Timeout: 30
+
+Parameters:
+  TableName:
+    Type: "String"
+
+Resources:
+  ShortenFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Events:
+        CatchAll:
+          Type: Api
+          Properties:
+            Path: /shorten
+            Method: POST
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+      Policies:
+        - Statement:
+          - Sid: DynamoDBPutItemsPolicy
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:UpdateItem
+            Resource: '*'
+    Metadata:
+      DockerTag: go1.x-v1
+      DockerContext: ./shorten
+      Dockerfile: Dockerfile
+
+  RedirectFunction:
+    Type: AWS::Serverless::Function
+    FunctionName: redirectFunction
+    Properties:
+      PackageType: Image
+      Events:
+        CatchAll:
+          Type: Api
+          Properties:
+            Path: /{short_url}
+            Method: GET
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+      Policies:
+        - Statement:
+          - Sid: DynamoDBGetItemsPolicy
+            Effect: Allow
+            Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource: '*'
+    Metadata:
+      DockerTag: go1.x-v1
+      DockerContext: ./redirect
+      Dockerfile: Dockerfile
+
+  UrlShortenerLinks:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      AttributeDefinitions:
+        - AttributeName: short_url
+          AttributeType: S
+      KeySchema:
+        - KeyType: HASH
+          AttributeName: short_url
+      ProvisionedThroughput:
+        WriteCapacityUnits: 5
+        ReadCapacityUnits: 5
+
+Outputs:
+  ShortenAPI:
+    Description: "API Gateway endpoint URL for Prod environment for First Function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/shorten/"
+  RedirectAPI:
+    Description: "API Gateway endpoint URL for Prod environment for First Function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/{short_url}"
